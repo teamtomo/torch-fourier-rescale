@@ -45,7 +45,7 @@ def fourier_rescale_2d(
     dft = torch.fft.fftshift(dft, dim=(-2,))
 
     # Fourier pad/crop
-    dft, new_nyquist = _rescale_rfft_2d(
+    dft, new_nyquist = fourier_rescale_rfft_2d(
         dft=dft,
         image_shape=image.shape[-2:],
         source_spacing=source_spacing,
@@ -65,7 +65,7 @@ def fourier_rescale_2d(
     return rescaled_image, tuple(new_spacing)
 
 
-def _rescale_rfft_2d(
+def fourier_rescale_rfft_2d(
     dft: torch.Tensor,
     image_shape: tuple[int, int],
     source_spacing: tuple[float, float],
