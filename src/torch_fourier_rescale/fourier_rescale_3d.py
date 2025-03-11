@@ -65,7 +65,7 @@ def fourier_rescale_3d(
 
     # multiply with scale factor to ensure DC components remains the same
     if preserve_mean:
-        scale_factor = np.prod(rescaled_image.shape) / np.prod(image.shape)
+        scale_factor = np.prod(rescaled_image.shape[-3:]) / np.prod(image.shape[-3:])
         rescaled_image *= scale_factor
 
     return rescaled_image, tuple(new_spacing)
