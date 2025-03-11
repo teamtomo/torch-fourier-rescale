@@ -3,7 +3,7 @@ import pytest
 from torch_fourier_rescale import fourier_rescale_2d, fourier_rescale_3d
 
 
-def test_fourier_rescale_2d(circle):
+def test_fourier_upscale_2d(circle):
     rescaled, new_spacing = fourier_rescale_2d(
         image=circle, source_spacing=1, target_spacing=0.5
     )
@@ -24,7 +24,7 @@ def test_fourier_downscale_2d(circle):
     assert tuple(rescaled.shape) == (14, 14)
 
 
-def test_fourier_rescale_3d(sphere):
+def test_fourier_upscale_3d(sphere):
     rescaled, new_spacing = fourier_rescale_3d(
         image=sphere, source_spacing=1, target_spacing=0.5
     )
