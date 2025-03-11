@@ -17,6 +17,13 @@ def test_fourier_rescale_2d(circle):
     assert rescaled.mean() != pytest.approx(circle.mean())
 
 
+def test_fourier_downscale_2d(circle):
+    rescaled, new_spacing = fourier_rescale_2d(
+        image=circle, source_spacing=1, target_spacing=2
+    )
+    assert tuple(rescaled.shape) == (14, 14)
+
+
 def test_fourier_rescale_3d(sphere):
     rescaled, new_spacing = fourier_rescale_3d(
         image=sphere, source_spacing=1, target_spacing=0.5
@@ -29,3 +36,11 @@ def test_fourier_rescale_3d(sphere):
         image=sphere, source_spacing=1, target_spacing=0.5, preserve_mean=False
     )
     assert rescaled.mean() != pytest.approx(sphere.mean())
+
+
+
+def test_fourier_downscale_3d(sphere):
+    rescaled, new_spacing = fourier_rescale_3d(
+        image=sphere, source_spacing=1, target_spacing=2
+    )
+    assert tuple(rescaled.shape) == (7, 7, 7)
