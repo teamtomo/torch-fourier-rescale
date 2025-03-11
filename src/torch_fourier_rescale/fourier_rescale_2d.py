@@ -13,6 +13,7 @@ def fourier_rescale_2d(
     image: torch.Tensor,
     source_spacing: float | tuple[float, float],
     target_spacing: float | tuple[float, float],
+    preserve_mean: bool = True,
 ) -> tuple[torch.Tensor, tuple[float, float]]:
     """Rescale 2D image(s) from `source_spacing` to `target_spacing`.
 
@@ -27,6 +28,8 @@ def fourier_rescale_2d(
         Pixel spacing in the input image.
     target_spacing: float | tuple[float, float]
         Pixel spacing in the output image.
+    preserve_mean: bool = True
+        Ensure that the mean (DC component) of the array is preserved after rescaling.
 
     Returns
     -------
@@ -49,7 +52,7 @@ def fourier_rescale_2d(
         dft=dft,
         image_shape=image.shape[-2:],
         source_spacing=source_spacing,
-        target_spacing=target_spacing
+        target_spacing=target_spacing,
     )
 
     # transform back to real space and recenter
@@ -61,6 +64,11 @@ def fourier_rescale_2d(
     source_spacing = np.array(source_spacing, dtype=np.float32)
     new_nyquist = np.array(new_nyquist, dtype=np.float32)
     new_spacing = 1 / (2 * new_nyquist * (1 / np.array(source_spacing)))
+
+    # multiply with scale factor to ensure DC components remains the same
+    if preserve_mean:
+        scale_factor = np.prod(rescaled_image.shape[-2:]) / np.prod(image.shape[-2:])
+        rescaled_image *= scale_factor
 
     return rescaled_image, tuple(new_spacing)
 
@@ -104,21 +112,24 @@ def _fourier_crop_w(dft: torch.Tensor, image_width: int, target_fftfreq: float):
 def _fourier_pad_h(dft: torch.Tensor, image_height: int, target_fftfreq: float):
     delta_fftfreq = 1 / image_height
     idx_nyquist = target_fftfreq / delta_fftfreq
-    idx_nyquist = ceil(idx_nyquist) if ceil(idx_nyquist) % 2 == 0 else floor(idx_nyquist)
+    idx_nyquist = (
+        ceil(idx_nyquist) if ceil(idx_nyquist) % 2 == 0 else floor(idx_nyquist)
+    )
     new_nyquist = idx_nyquist * delta_fftfreq
     n_frequencies = (dft.shape[-2] // 2) + 1
     pad_h = idx_nyquist - (n_frequencies - 1)
-    dft = F.pad(dft, pad=(0, 0, pad_h, pad_h), mode='constant', value=0)
+    dft = F.pad(dft, pad=(0, 0, pad_h, pad_h), mode="constant", value=0)
     return dft, new_nyquist
 
 
 def _fourier_pad_w(dft: torch.Tensor, image_width: int, target_fftfreq: float):
     delta_fftfreq = 1 / image_width
     idx_nyquist = target_fftfreq / delta_fftfreq
-    idx_nyquist = ceil(idx_nyquist) if ceil(idx_nyquist) % 2 == 0 else floor(
-        idx_nyquist)
+    idx_nyquist = (
+        ceil(idx_nyquist) if ceil(idx_nyquist) % 2 == 0 else floor(idx_nyquist)
+    )
     new_nyquist = idx_nyquist * delta_fftfreq
     n_frequencies = dft.shape[-1]
     pad_w = idx_nyquist - (n_frequencies - 1)
-    dft = F.pad(dft, pad=(0, pad_w), mode='constant', value=0)
+    dft = F.pad(dft, pad=(0, pad_w), mode="constant", value=0)
     return dft, new_nyquist
