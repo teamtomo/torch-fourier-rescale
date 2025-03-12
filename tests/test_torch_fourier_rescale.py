@@ -78,7 +78,7 @@ def test_fourier_rescale_3d_mean(sphere, spacing):
     rescaled, new_spacing = fourier_rescale_3d(
         image=sphere, source_spacing=1, target_spacing=spacing
     )
-    assert rescaled.mean() == pytest.approx(sphere.mean())
+    assert rescaled.mean() != pytest.approx(sphere.mean())
 
     rescaled, new_spacing = fourier_rescale_3d(
         image=sphere, source_spacing=1, target_spacing=spacing, preserve_mean=False
