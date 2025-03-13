@@ -55,18 +55,19 @@ def fourier_rescale_3d(
 
     # transform back to real space and recenter
     dft = torch.fft.ifftshift(dft, dim=(-3, -2))
-    rescaled_image = torch.fft.irfftn(dft, dim=(-3, -2, -1), s=new_shape)
+    if preserve_mean:
+        rescaled_image = (  # norm='forward' deactivates default fft normalization
+            torch.fft.irfftn(dft, dim=(-3, -2, -1), s=new_shape, norm="forward")
+            * (1 / np.prod(image.shape[-3:]))
+        )
+    else:
+        rescaled_image = torch.fft.irfftn(dft, dim=(-3, -2, -1), s=new_shape)
     rescaled_image = torch.fft.ifftshift(rescaled_image, dim=(-3, -2, -1))
 
     # Calculate new spacing after rescaling
     source_spacing = np.array(source_spacing, dtype=np.float32)
     new_nyquist = np.array(new_nyquist, dtype=np.float32)
     new_spacing = 1 / (2 * new_nyquist * (1 / source_spacing))
-
-    # multiply with scale factor to ensure DC components remains the same
-    if preserve_mean:
-        scale_factor = np.prod(rescaled_image.shape[-3:]) / np.prod(image.shape[-3:])
-        rescaled_image *= scale_factor
 
     return rescaled_image, tuple(new_spacing)
 
