@@ -58,10 +58,10 @@ def fourier_rescale_2d(
     # transform back to real space and recenter
     dft = torch.fft.ifftshift(dft, dim=(-2,))
     if preserve_mean:
-        rescaled_image = (  # norm='forward' deactivates default fft normalization
-            torch.fft.irfftn(dft, dim=(-2, -1), s=new_shape, norm="forward")
-            * (1 / np.prod(image.shape[-2:]))
-        )
+        # we changed the number of elements in the FT so set norm='forward' to deactivate
+        # default fft normalization by 1/n and normalise by the correct factor
+        rescaled_image = torch.fft.irfftn(dft, dim=(-2, -1), s=new_shape, norm="forward")
+        rescaled_image = rescaled_image * (1 / np.prod(image.shape[-2:]))
     else:
         rescaled_image = torch.fft.irfftn(dft, dim=(-2, -1), s=new_shape)
     rescaled_image = torch.fft.ifftshift(rescaled_image, dim=(-2, -1))
