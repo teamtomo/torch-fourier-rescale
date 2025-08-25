@@ -207,11 +207,11 @@ def test_target_shape_vs_target_spacing_3d(sphere):
     assert spacing_from_shape == pytest.approx(spacing_from_spacing)
 
 
-def test_mutual_exclusivity():
+def test_providing_target_spacing_and_shape():
     # Test that specifying both target_shape and target_spacing raises an error
     image = torch.randn(28, 28)
     
-    with pytest.raises(ValueError, match="Only one of target_spacing or target_shape"):
+    with pytest.raises(ValueError, match="Cannot specify both target_spacing and target_shape"):
         fourier_rescale_2d(
             image=image, 
             source_spacing=1, 
