@@ -88,7 +88,6 @@ def test_fourier_rescale_3d_mean(sphere, spacing):
     assert rescaled.mean() != pytest.approx(sphere.mean())
 
 
-
 @pytest.mark.parametrize("dtype", [
     int,
     float,
