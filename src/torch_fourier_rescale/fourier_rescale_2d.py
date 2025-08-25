@@ -6,16 +6,16 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from .utils import get_target_fftfreq
 
 
 def fourier_rescale_2d(
     image: torch.Tensor,
-    source_spacing: float | tuple[float, float],
-    target_spacing: float | tuple[float, float],
+    source_spacing: float | tuple[float, float] | None = None,
+    target_spacing: float | tuple[float, float] | None = None,
+    target_shape: tuple[int, int] | None = None,
     preserve_mean: bool = True,
 ) -> tuple[torch.Tensor, tuple[float, float]]:
-    """Rescale 2D image(s) from `source_spacing` to `target_spacing`.
+    """Rescale 2D image(s) from `source_spacing` to `target_spacing` or to `target_shape`.
 
     Rescaling is performed in Fourier space by either cropping or padding the
     discrete Fourier transform (DFT).
@@ -24,10 +24,14 @@ def fourier_rescale_2d(
     ----------
     image: torch.Tensor
         `(..., h, w)` array of image data
-    source_spacing: float | tuple[float, float]
-        Pixel spacing in the input image.
-    target_spacing: float | tuple[float, float]
-        Pixel spacing in the output image.
+    source_spacing: float | tuple[float, float] | None
+        Pixel spacing in the input image. Required if target_spacing is specified.
+        If None when target_shape is specified, assumes uniform spacing of 1.0.
+    target_spacing: float | tuple[float, float] | None
+        Pixel spacing in the output image. Mutually exclusive with target_shape.
+    target_shape: tuple[int, int] | None
+        Target spatial dimensions (height, width) for the output image. 
+        Mutually exclusive with target_spacing.
     preserve_mean: bool = True
         Ensure that the mean (DC component) of the array is preserved after rescaling.
 
@@ -35,25 +39,59 @@ def fourier_rescale_2d(
     -------
     rescaled_image, (new_spacing_h, new_spacing_w)
     """
-    if isinstance(source_spacing, int | float | numbers.Real):
+    if target_spacing is None and target_shape is None:
+        raise ValueError("Either target_spacing or target_shape must be specified")
+    if target_spacing is not None and target_shape is not None:
+        raise ValueError("Only one of target_spacing or target_shape can be specified")
+    
+    # Handle source_spacing
+    if source_spacing is None:
+        if target_spacing is not None:
+            raise ValueError("source_spacing is required when target_spacing is specified")
+        # Default to uniform spacing of 1.0 when using target_shape
+        source_spacing = (1.0, 1.0)
+    elif isinstance(source_spacing, int | float | numbers.Real):
         source_spacing = (source_spacing, source_spacing)
-    if isinstance(target_spacing, int | float | numbers.Real):
-        target_spacing = (target_spacing, target_spacing)
-    if np.allclose(source_spacing, target_spacing):
-        return image, source_spacing
+    
+    # If only target_shape is specified, we can skip spacing calculations
+    if target_shape is not None and target_spacing is None:
+        # No need to calculate target_spacing or check if spacings are close
+        pass
+    else:
+        # If target_shape is specified along with source_spacing, calculate target_spacing
+        if target_shape is not None:
+            source_shape = image.shape[-2:]
+            target_spacing = tuple(
+                src_sp * (src_sh / tgt_sh)
+                for src_sp, src_sh, tgt_sh in zip(source_spacing, source_shape, target_shape)
+            )
+        elif isinstance(target_spacing, int | float | numbers.Real):
+            target_spacing = (target_spacing, target_spacing)
+        
+        if np.allclose(source_spacing, target_spacing):
+            return image, source_spacing
 
     # place image center at array indices [0, 0] and compute centered rfft2
     image = torch.fft.fftshift(image, dim=(-2, -1))
     dft = torch.fft.rfftn(image, dim=(-2, -1))
     dft = torch.fft.fftshift(dft, dim=(-2,))
 
+    # Calculate target shape if using spacing
+    if target_shape is None:
+        # Calculate target shape from spacing
+        source_shape = image.shape[-2:]
+        target_shape = tuple(
+            int(np.round(src_sh * (src_sp / tgt_sp)))
+            for src_sh, src_sp, tgt_sp in zip(source_shape, source_spacing, target_spacing)
+        )
+    
     # Fourier pad/crop
-    dft, new_nyquist, new_shape = fourier_rescale_rfft_2d(
+    dft = fourier_rescale_rfft_2d(
         dft=dft,
         image_shape=image.shape[-2:],
-        source_spacing=source_spacing,
-        target_spacing=target_spacing,
+        target_shape=target_shape,
     )
+    new_shape = target_shape
 
     # transform back to real space and recenter
     dft = torch.fft.ifftshift(dft, dim=(-2,))
@@ -68,8 +106,10 @@ def fourier_rescale_2d(
 
     # Calculate new spacing after rescaling
     source_spacing = np.array(source_spacing, dtype=np.float32)
-    new_nyquist = np.array(new_nyquist, dtype=np.float32)
-    new_spacing = 1 / (2 * new_nyquist * (1 / np.array(source_spacing)))
+    new_spacing = tuple(
+        src_sp * (src_sh / new_sh)
+        for src_sp, src_sh, new_sh in zip(source_spacing, image.shape[-2:], new_shape)
+    )
 
     return rescaled_image, tuple(new_spacing)
 
@@ -77,28 +117,40 @@ def fourier_rescale_2d(
 def fourier_rescale_rfft_2d(
     dft: torch.Tensor,
     image_shape: tuple[int, int],
-    source_spacing: tuple[float, float],
-    target_spacing: tuple[float, float],
-) -> tuple[torch.Tensor, tuple[float, float], tuple[int, int]]:
+    target_shape: tuple[int, int],
+) -> torch.Tensor:
+    """Rescale a 2D rfft by padding or cropping to achieve target shape.
+    
+    Parameters
+    ----------
+    dft : torch.Tensor
+        The rfftn result with fftshift applied to non-rfft dimensions
+    image_shape : tuple[int, int]
+        Original image shape (h, w)
+    target_shape : tuple[int, int]
+        Target image shape (h, w)
+        
+    Returns
+    -------
+    torch.Tensor
+        The rescaled DFT
+    """
     h, w = image_shape
-    freq_h, freq_w = get_target_fftfreq(source_spacing, target_spacing)
-    if freq_h > 0.5:
-        dft, nyquist_h, scaled_h = _fourier_pad_h(
-            dft, image_height=h, target_fftfreq=freq_h
-        )
-    else:
-        dft, nyquist_h, scaled_h = _fourier_crop_h(
-            dft, image_height=h, target_fftfreq=freq_h
-        )
-    if freq_w > 0.5:
-        dft, nyquist_w, scaled_w = _fourier_pad_w(
-            dft, image_width=w, target_fftfreq=freq_w
-        )
-    else:
-        dft, nyquist_w, scaled_w = _fourier_crop_w(
-            dft, image_width=w, target_fftfreq=freq_w
-        )
-    return dft, (nyquist_h, nyquist_w), (scaled_h, scaled_w)
+    target_h, target_w = target_shape
+    
+    # Handle height dimension
+    if target_h > h:
+        dft = _fourier_pad_h_shape(dft, source_height=h, target_height=target_h)
+    elif target_h < h:
+        dft = _fourier_crop_h_shape(dft, source_height=h, target_height=target_h)
+    
+    # Handle width dimension  
+    if target_w > w:
+        dft = _fourier_pad_w_shape(dft, source_width=w, target_width=target_w)
+    elif target_w < w:
+        dft = _fourier_crop_w_shape(dft, source_width=w, target_width=target_w)
+    
+    return dft
 
 
 def _fourier_crop_h(dft: torch.Tensor, image_height: int, target_fftfreq: float):
@@ -153,3 +205,58 @@ def _fourier_pad_w(dft: torch.Tensor, image_width: int, target_fftfreq: float):
     dft = F.pad(dft, pad=(0, pad_w), mode="constant", value=0)
     new_w = image_width + 2 * pad_w - (1 if image_width % 2 == 1 else 0)
     return dft, new_nyquist, new_w
+
+
+def _fourier_crop_h_shape(dft: torch.Tensor, source_height: int, target_height: int):
+    """Crop height dimension to target height."""
+    # Calculate how many frequencies to keep
+    # For even target_height, we keep target_height frequencies centered around 0
+    # For odd target_height, we keep target_height frequencies centered around 0
+    current_h = dft.shape[-2]
+    
+    # Calculate crop amounts
+    total_crop = current_h - target_height
+    crop_start = total_crop // 2
+    crop_end = total_crop - crop_start
+    
+    # Crop the DFT
+    if crop_end > 0:
+        return dft[..., crop_start:-crop_end, :]
+    else:
+        return dft[..., crop_start:, :]
+
+
+def _fourier_crop_w_shape(dft: torch.Tensor, source_width: int, target_width: int):
+    """Crop width dimension to target width (rfft dimension)."""
+    # For rfft, we need to handle the positive frequencies only
+    # Calculate how many positive frequencies we need
+    target_positive_freqs = (target_width // 2) + 1
+    
+    # Crop to keep only the required frequencies
+    return dft[..., :, :target_positive_freqs]
+
+
+def _fourier_pad_h_shape(dft: torch.Tensor, source_height: int, target_height: int):
+    """Pad height dimension to target height."""
+    current_h = dft.shape[-2]
+    total_pad = target_height - current_h
+    
+    # For even/odd handling
+    pad_start = total_pad // 2
+    pad_end = total_pad - pad_start
+    
+    # Adjust for odd source height
+    if source_height % 2 == 1:
+        pad_end = pad_end - 1
+    
+    return F.pad(dft, pad=(0, 0, pad_start, pad_end), mode="constant", value=0)
+
+
+def _fourier_pad_w_shape(dft: torch.Tensor, source_width: int, target_width: int):
+    """Pad width dimension to target width (rfft dimension)."""
+    # For rfft, calculate how many positive frequencies we need
+    current_positive_freqs = dft.shape[-1]
+    target_positive_freqs = (target_width // 2) + 1
+    pad_w = target_positive_freqs - current_positive_freqs
+    
+    return F.pad(dft, pad=(0, pad_w), mode="constant", value=0)
