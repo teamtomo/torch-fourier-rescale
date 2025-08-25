@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import numbers
 from math import ceil, floor
 
 import numpy as np
@@ -32,11 +32,11 @@ def fourier_rescale_2d(
     -------
     rescaled_image, (new_spacing_h, new_spacing_w)
     """
-    if isinstance(source_spacing, int | float):
+    if isinstance(source_spacing, int | float | numbers.Real):
         source_spacing = (source_spacing, source_spacing)
-    if isinstance(target_spacing, int | float):
+    if isinstance(target_spacing, int | float | numbers.Real):
         target_spacing = (target_spacing, target_spacing)
-    if source_spacing == target_spacing:
+    if np.allclose(source_spacing, target_spacing):
         return image, source_spacing
 
     # place image center at array indices [0, 0] and compute centered rfft2
