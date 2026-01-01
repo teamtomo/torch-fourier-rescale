@@ -52,7 +52,7 @@ def fourier_rescale_3d(
         target_spacing = normalize_spacing(target_spacing, 3)
 
         # Early return if no change needed
-        if np.allclose(source_spacing, target_spacing):
+        if np.allclose(source_spacing, target_spacing, atol=1e-8):
             return image, source_spacing
 
         # Calculate target_shape from spacing ratio
