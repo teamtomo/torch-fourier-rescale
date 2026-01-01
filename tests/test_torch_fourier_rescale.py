@@ -3,7 +3,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from torch_fourier_rescale import fourier_rescale_2d, fourier_rescale_3d, fourier_rescale_rfft_2d, fourier_rescale_rfft_3d
+from torch_fourier_rescale import fourier_rescale_2d, fourier_rescale_3d
 
 
 def test_fourier_upscale_2d(circle):
