@@ -3,7 +3,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from torch_fourier_rescale import fourier_rescale_2d, fourier_rescale_3d, fourier_rescale_rfft_2d, fourier_rescale_rfft_3d
+from torch_fourier_rescale import fourier_rescale_2d, fourier_rescale_3d
 
 
 def test_fourier_upscale_2d(circle):
@@ -207,7 +207,7 @@ def test_target_shape_vs_target_spacing_3d(sphere):
     assert spacing_from_shape == pytest.approx(spacing_from_spacing)
 
 
-def test_providing_target_spacing_and_shape():
+def test_providing_target_spacing_and_shape_2d():
     # Test that specifying both target_shape and target_spacing raises an error
     image = torch.randn(28, 28)
     
@@ -219,10 +219,46 @@ def test_providing_target_spacing_and_shape():
             target_shape=(56, 56)
         )
     
+    # Test that specifying target_spacing without source_spacing raises an error
+    with pytest.raises(ValueError, match="source_spacing is required when target_spacing is specified"):
+        fourier_rescale_2d(
+            image=image,
+            target_spacing=0.5,
+            target_shape=(56, 56)
+        )
+
     # Test that specifying neither raises an error
     with pytest.raises(ValueError, match="Either target_spacing or target_shape"):
         fourier_rescale_2d(
             image=image, 
+            source_spacing=1
+        )
+
+
+def test_providing_target_spacing_and_shape_3d():
+    # Test that specifying both target_shape and target_spacing raises an error
+    image = torch.randn(28, 28, 28)
+    
+    with pytest.raises(ValueError, match="Cannot specify both target_spacing and target_shape"):
+        fourier_rescale_3d(
+            image=image,
+            source_spacing=1,
+            target_spacing=0.5,
+            target_shape=(56, 56, 56)
+        )
+
+    # Test that specifying target_spacing without source_spacing raises an error
+    with pytest.raises(ValueError, match="source_spacing is required when target_spacing is specified"):
+        fourier_rescale_3d(
+            image=image,
+            target_spacing=0.5,
+            target_shape=(56, 56, 56)
+        )
+
+    # Test that specifying neither raises an error
+    with pytest.raises(ValueError, match="Either target_spacing or target_shape"):
+        fourier_rescale_3d(
+            image=image,
             source_spacing=1
         )
 

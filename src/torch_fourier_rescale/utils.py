@@ -1,4 +1,3 @@
-from typing import Sequence
 import numbers
 
 import numpy as np
@@ -6,11 +5,9 @@ import torch
 from torch.nn import functional as F
 
 
-def normalize_spacing(spacing: float | tuple | None, ndim: int) -> tuple[float, ...]:
+def normalize_spacing(spacing: int | float | tuple, ndim: int) -> tuple[float, ...]:
     """Normalize spacing input to a tuple of the correct dimension."""
-    if spacing is None:
-        return (1.0,) * ndim
-    elif isinstance(spacing, int | float | numbers.Real):
+    if isinstance(spacing, int | float | numbers.Real):
         return (float(spacing),) * ndim
     else:
         return tuple(float(s) for s in spacing)
